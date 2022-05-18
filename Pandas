@@ -1,0 +1,319 @@
+# Group Members: Eunsu Kim, Daniel Guzman, Yondonjamts Otgontamir
+# Course Section: CIS 3120 ETRA
+# Date: December 13th, 2021
+
+import pandas as pd
+from IPython.display import display
+
+pd.set_option('max_columns', None)
+
+df_mtv = pd.read_csv("Desktop/FinalProject_Datasets/netflix_titles.csv")
+df_rtIMDBScores = pd.read_csv('Desktop/FinalProject_Datasets/netflix-rotten-tomatoes-metacritic-imdb.csv')
+df_movies = pd.read_csv('Desktop/FinalProject_Datasets/MoviesOnStreamingPlatforms_updated.csv')
+df_tvShows = pd.read_csv('Desktop/FinalProject_Datasets/tv_shows.csv')
+
+#-------------------------------------------------------------------------------------------------------------------------
+# Cleaning up df_mtv dataset - (Netflix Movies and TV Shows)
+
+df_mtv.rename(columns={'title':'Title'}, inplace=True)
+df_mtv.drop('description', axis=1, inplace=True) # Dropped description column.
+# df_main.head()
+
+#-------------------------------------------------------------------------------------------------------------------------
+
+# Cleaning up df_rtIMDBScores dataset - (Latest Netflix data with 26+ joined attributes)
+
+df_rtIMDBScores.drop(['Release Date', 'Netflix Link', 'IMDb Link', 'Summary', 'Image', 'Poster', 'TMDb Trailer', 
+                      'Trailer Site'], axis=1, inplace=True)
+
+# display(df_rtIMDBScores)
+
+#-------------------------------------------------------------------------------------------------------------------------
+
+# Cleaning up df_moviesOnNetflix dataset - (Movies on Netflix, Prime Video, Hulu and Disney+)
+
+# Filtering out titles that do not appear on Netflix
+moviesFilter = df_movies["Netflix"] == 1
+moviesOnNetflix = df_movies[moviesFilter]
+
+# Dropping Netflix column -- Dataframe already filtered to show movies only on Netflix
+moviesOnNetflix.drop(['Unnamed: 0', 'Hulu', 'Netflix', 'Prime Video', 'Disney+', 'Type'], axis=1, inplace=True)
+
+# display(moviesOnNetflix)
+
+#-------------------------------------------------------------------------------------------------------------------------
+
+# Cleaning up df_tvShowsOnNetflix dataset - (TV shows on Netflix, Prime Video, Hulu and Disney+)
+
+# Filtering out TV Shows that do not appear on Netflix
+tvShowsFilter = df_tvShows['Netflix'] == 1
+tvShowsOnNetflix = df_tvShows[tvShowsFilter]
+
+# Dropping unnecessary columns in tvShowsOnNetflix dataframe
+tvShowsOnNetflix.drop(['Unnamed: 0', 'Netflix', 'Hulu', 'Prime Video', 'Disney+', 'Type'], axis=1, inplace=True)
+
+# tvShowsOnNetflix.head()
+# Decided to not include data from this dataset to main_df - too much null values and redundant data.
+
+#-------------------------------------------------------------------------------------------------------------------------
+
+# Combining cleaned datasets into main dataset to be analyzed
+
+df_pt1 = pd.merge(df_mtv, df_rtIMDBScores, on="Title", how="inner")
+main_df = pd.merge(df_pt1, moviesOnNetflix, on="Title", how="left")
+main_df.sort_values("Title", inplace=True)
+
+# Dropping unnecessary columns
+main_df.drop(['show_id', 'Series or Movie', 'Runtime_x', 'Director', 'Writer', 'Actors','View Rating', 'Netflix Release Date', 
+             'ID', 'Year', 'Age', 'IMDb', 'Rotten Tomatoes', 'Directors', 'Genres', 'Country', 'Language', 'Runtime_y']
+             , axis=1, inplace=True)
+
+# Renaming columns
+main_df.rename(columns={'type': 'Type of Content', 'director':'Director', 'cast':'Actors', 'country':'Country Produced', 
+                        'date_added':'Date Added To Netflix', 'release_year':'Release Year', 'rating':'Rating',
+                       'duration':'Duration', 'listed_in':'Listed In', 'Languages':'Languages Available', 
+                        'Boxoffice':'Box Office Revenue Generated'}, inplace=True)
+
+# Information about main dataframe/ Handling null values
+
+# main_df.isnull().any() # Most columns have null values. 
+# display(main_df.isnull().sum().sort_values(ascending = False)) # Counting how many null values there are in each column
+
+# Findings: 
+    # Box Office Revenue Generated has too much null values. Column dropped.
+    # Metacritic Score & Rotten Tomatoes Score has too much null values. Column dropped.
+    # Production House has too much null values. Column dropped.
+    # Awards Received/Nominated For has too much null values. Column dropped.
+    # Rest of the columns with null values can be either filled/ drop rows with null values. 
+
+main_df.drop(['Box Office Revenue Generated', 'Metacritic Score', 'Production House', 'Awards Received', 
+              'Awards Nominated For', 'Rotten Tomatoes Score'], axis=1, inplace=True)
+
+# Filling remaining null values with placeholder values; changing dtype of IMDb Score as float; dropping any rows in main_df
+# that has null values for 'Date Added to Netflix' column - will not be useful in our analysis. 
+
+main_df['Actors'].fillna("No Cast", inplace=True)
+main_df['Languages Available'].fillna("Languages Unavailable", inplace=True)
+main_df['Hidden Gem Score'].astype(float).fillna("No Hidden Gem Score", inplace=True)
+main_df['IMDb Score'].astype(float).fillna("IMDb Score Unavailable", inplace=True)
+main_df['IMDb Votes'].fillna("IMDb Votes Unavailable", inplace=True)
+main_df['Country Produced'].fillna("Country Production Unavailable", inplace=True)
+main_df['Genre'].fillna("Genre Unavailable", inplace=True)
+main_df['Director'].fillna("Director Unavailable", inplace=True)
+main_df['Tags'].fillna("No Tags", inplace=True)
+main_df['Country Availability'].fillna("Country Unavailable", inplace=True)
+main_df['Duration'].fillna("Duration Unavailable", inplace=True)
+main_df['Rating'].fillna("Rating Unavailable", inplace=True)
+
+main_df.dropna(axis=0, subset=['Date Added To Netflix'], inplace=True)
+main_df.reset_index(drop=True, inplace=True) # Resetting the index; using drop attribute to avoid old index from
+                                             # being added as a new column. 
+print('Snippet of main_df using .head():')
+display(main_df.head())
+
+print("-------------------------------------------------------------------------------------------------------------------")
+
+# Data Analysis
+
+# 1. Which type of content is most prevalent on Netflix?
+
+mtvCounts = main_df['Type of Content'].value_counts() # Finding # of titles under Movies and TV Shows. 
+
+# Creating a pie chart to show comparison between number of movies and tv shows on Netflix.
+mtvPieChart = mtvCounts.plot(kind="pie", title="Number of Movies and TV Shows on Netflix", 
+                             autopct='%1.1f%%',shadow=True, startangle=0, figsize=(10, 10), fontsize=10)
+
+# Finding the average IMDb Score for movie and TV titles on Netflix
+mtv_pivot = main_df.pivot_table(index='Type of Content', aggfunc={'IMDb Score': 'mean'})
+
+print('Types of Content on Netflix and their average IMDb Scores: ')
+display(mtv_pivot)
+
+print("-------------------------------------------------------------------------------------------------------------------")
+
+# 2. What is the most popular genre for movies/TV shows on Netflix?
+
+# Part 1: Most popular genres for TV shows
+
+tv_filter = main_df['Type of Content'] == 'TV Show'  
+tv = main_df[tv_filter] # Filtering main_df for TV Show titles; assigning filtered DataFrame to variable: tv
+
+tv_genre_list = tv['Genre'].str.split(',')
+
+tv_gen_list = {}
+
+for genres in tv_genre_list:
+    for genre in genres:
+        if (genre in tv_gen_list):
+            tv_gen_list[genre] += 1
+        else:
+            tv_gen_list[genre] = 1
+            
+tv_gen_df = pd.DataFrame(tv_gen_list.values(), index= tv_gen_list.keys(),
+                         columns = {'Number of TV Show Titles'})
+
+# Sorting tv_gen_df from highest to lowest to find top 10 genres for TV Shows on Netflix. 
+
+tv_gen_df.sort_values(by= "Number of TV Show Titles", ascending=False, inplace=True)
+top_10_tv_genres = tv_gen_df[:10] 
+
+print('Top 10 TV Show genres and the number of titles under each genre: ')
+
+display(top_10_tv_genres) # Displaying top 10 genres for TV shows and the number of TV show titles associated with each genre. 
+
+tv_genrePlot = top_10_tv_genres.plot(kind='bar',ylabel= 'Number of Titles', title='Top 10 TV Show Genres on Netflix',
+                          figsize=(12,12), fontsize=12, legend=False)
+
+# Part 2: Most popular genres for Movies
+
+movie_filter  = main_df['Type of Content'] == 'Movie' 
+movie = main_df[movie_filter] # Filtering main_df for movie titles; assigning results to variable: movie
+
+movie_genre_list = movie['Genre'].str.split(',')
+movie_gen_list = {}
+
+for genres in movie_genre_list:
+    for genre in genres:
+        if (genre in movie_gen_list):
+            movie_gen_list[genre] += 1
+        else:
+            movie_gen_list[genre] = 1
+            
+movie_gen_df = pd.DataFrame(movie_gen_list.values(), index= movie_gen_list.keys(),
+                           columns = {'Number of Movie Titles'})
+
+# Sorting movie_gen_df from highest to lowest to find top 10 genres for movies on Netflix. 
+
+movie_gen_df.sort_values(by='Number of Movie Titles', ascending=False, inplace=True)
+top_10_movie_genres = movie_gen_df[:10]  
+
+print('Top 10 Movie genres and the number of titles under each genre: ')
+display(top_10_movie_genres)
+
+movie_genrePlot = top_10_movie_genres.plot(kind='bar',ylabel= 'Number of Titles', title= "Top 10 Movie Genres on Netflix",
+                          figsize=(12,12), fontsize=12, legend=False)
+
+print("-------------------------------------------------------------------------------------------------------------------")
+
+# 3. Finding highest rated movies/TV Shows | What are the genres?
+
+# Part 1: Highest Rated TV Shows
+
+tv_imdb = tv.sort_values(by="IMDb Score", ascending=False) # Sorting tv dataframe by IMDb Score
+top_10_tv_imdb = tv_imdb[:10] # Indexing first 10 rows of tv dataframe and assigning results to varible: top_10_tv_imdb
+
+top_10_tv_imdb_plot = top_10_tv_imdb.plot(kind='bar', x='Title', 
+                                          y='IMDb Score', legend=False, ylabel= 'IMDb Score',
+                                         figsize=(12,12), fontsize=12, title='Top 10 TV Show Titles on Netflix')
+
+# Creating a pivot table to show top 10 highest rated TV show titles, the title's genre associations, and IMDb Score. 
+top_tv_imdb_pivot = top_10_tv_imdb.pivot_table(index='Title', aggfunc={'Genre': 'sum', 'IMDb Score': 'mean'})
+
+print('Pivot Table showing top 10 TV Show titles, their genres, and their IMDb Scores: ')
+display(top_tv_imdb_pivot)
+
+
+# Part 2: Highest Rated Movies
+
+movie_imdb = movie.sort_values(by='IMDb Score', ascending=False)
+top_10_movie_imdb = movie_imdb[:10]
+
+top_10_movie_imdb_plot = top_10_movie_imdb.plot(kind='bar', x='Title', y='IMDb Score',
+                                               legend=False, ylabel= 'IMDb Score', 
+                                                figsize=(12,12), fontsize=12, title='Top 10 Movie Titles on Netflix')
+
+# Creating a pivot table to show top 10 highest rated movie titles, each title's genre associations, and IMDb Score.
+top_movie_imdb_pivot = top_10_movie_imdb.pivot_table(index='Title', aggfunc={'Genre': 'sum', 'IMDb Score': 'mean'})
+
+print('Pivot Table showing top 10 movie titles, their genres, and their IMDb Scores: ')
+display(top_movie_imdb_pivot)
+
+print("-------------------------------------------------------------------------------------------------------------------")
+
+# 4. Directors
+
+# Part 1: Directors of the most TV Shows
+
+directors_tv = tv.dropna(subset=['Director']) # Dropping any rows of tv dataframe with null values in 'Director' column. 
+
+tv_director_list = directors_tv['Director'].str.split(',')
+tv_dir_list = {} # Creating a dictionary which stores each director's name as a key, and the respective counts
+                 # as the value. 
+
+for directors in tv_director_list:
+    for director in directors:
+        if (director in tv_dir_list):
+            tv_dir_list[director] += 1
+        else:
+            tv_dir_list[director] = 1
+            
+tv_dir_df = pd.DataFrame(tv_dir_list.values(), index= tv_dir_list.keys(),
+                        columns = {'Total # of TV Shows Directed'})
+
+# Cleaning DataFrame containing information about TV Show directors. 
+tv_dir_df.sort_values(by='Total # of TV Shows Directed', ascending=False, inplace=True)
+tv_dir_df.drop(['Director Unavailable'], axis=0, inplace=True) # Dropping counts for Director Unavailable. (Placeholder value)
+tv_dir_df.reset_index(inplace=True)
+tv_dir_df.rename(columns= {'index':'Director'}, inplace=True)
+
+# Indexing first 10 rows from created DataFrame and assigning result to variable: top_10_dir_tv
+top_10_dir_tv = tv_dir_df[:10] 
+
+print('Top 10 Directors of TV Shows on Netflix: ')
+display(top_10_dir_tv)
+
+# Average IMDb Score for directors with most TV Shows on Netflix
+
+director_tv_filter = top_10_dir_tv['Director']
+
+rdf_director_tv = main_df[main_df.Director.isin(director_tv_filter)].copy()
+
+rdf_tvd_pivot = rdf_director_tv.pivot_table(index='Director', aggfunc={'IMDb Score': 'mean'})
+rdf_tvd_pivot.sort_values(by='IMDb Score', ascending=False, inplace=True)
+
+print('Top 10 Directors of TV Shows on Netflix and the average IMDb Scores of their directed works: ')
+display(rdf_tvd_pivot)
+
+print("-------------------------------------------------------------------------------------------------------------------")
+
+# Part 2: Directors of the most movies
+
+directors_movie = movie.dropna(subset=['Director']) # Dropping any rows of movie dataframe with null values in 'Director' column.
+
+movie_director_list = directors_movie['Director'].str.split(',')
+movie_dir_list = {} # Creating a dictionary which stores each director's name as a key and their respective counts
+                    # as the value. 
+
+for directors in movie_director_list:
+    for director in directors:
+        if (director in movie_dir_list):
+            movie_dir_list[director] += 1
+        else:
+            movie_dir_list[director] = 1
+                  
+movie_dir_df = pd.DataFrame(movie_dir_list.values(), index= movie_dir_list.keys(),
+                        columns = {'Total # of Movies Directed'})
+
+# Cleaning DataFrame containing information about movie directors. 
+movie_dir_df.sort_values(by='Total # of Movies Directed', ascending=False, inplace=True)
+movie_dir_df.drop(['Director Unavailable'], axis=0, inplace=True)
+movie_dir_df.reset_index(inplace=True)
+movie_dir_df.rename(columns= {'index':'Director'}, inplace=True)
+
+# Indexing first 10 rows from created DataFrame and assigning result to variable: top_10_dir_movie
+top_10_dir_movie = movie_dir_df[:10]
+
+print('Top 10 Movie Directors on Netflix: ')
+display(top_10_dir_movie)
+
+# Average IMDb Score for directors with most movies on Netflix
+
+director_filter = top_10_dir_movie['Director']
+
+rdf_director_movie = main_df[main_df.Director.isin(director_filter)].copy()
+
+rdf_dm_pivot = rdf_director_movie.pivot_table(index='Director', aggfunc={'IMDb Score': 'mean'})
+rdf_dm_pivot.sort_values(by='IMDb Score', ascending=False, inplace=True)
+
+print('Top 10 Directors of Movies on Netflix and the average IMDb Scores of their directed works: ')
+display(rdf_dm_pivot)
